@@ -11,8 +11,8 @@ import { Upload, FolderOpen, Share2, FileText, Clock, X } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 
 const Dashboard = () => {
-  const { user } = useAuth()
-  const { files, loading, refreshFiles } = useFiles(user?.id)
+  const { user, loading: authLoading } = useAuth()
+  const { files, loading, refreshFiles, error: filesError } = useFiles(user?.id)
   const [activeTab, setActiveTab] = useState('files')
   const [searchResults, setSearchResults] = useState(null)
   const [searching, setSearching] = useState(false)
@@ -86,6 +86,39 @@ const Dashboard = () => {
       console.error('Error revoking share link:', error)
       // Show error message
     }
+  }
+
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Show error if files failed to load due to auth
+  if (filesError && (filesError.includes('permission') || filesError.includes('401') || filesError.includes('Unauthorized') || filesError.includes('not authenticated'))) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
+        <Header user={user} />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="bg-red-50 border border-red-200 rounded-xl p-6">
+            <h2 className="text-lg font-semibold text-red-800 mb-2">Authentication Error</h2>
+            <p className="text-red-700 mb-4">{filesError}</p>
+            <div className="text-sm text-red-600 space-y-1">
+              <p>• Make sure you are logged in</p>
+              <p>• Check that database tables exist (run database/setup.sql)</p>
+              <p>• Verify RLS policies are set up correctly</p>
+              <p>• Check browser console for more details</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -181,7 +214,7 @@ const Dashboard = () => {
 
             {/* Upload Tab */}
             {activeTab === 'upload' && (
-              <FileUploader onUploadComplete={handleUploadComplete} />
+              <FileUploader userId={user?.id} onUploadComplete={handleUploadComplete} />
             )}
 
             {/* Share Tab */}

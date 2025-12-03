@@ -1,7 +1,7 @@
 import { FileText } from 'lucide-react'
 import FileCard from './FileCard'
 
-const FileList = ({ files, loading, onFileDelete }) => {
+const FileList = ({ files, loading, onFileDelete, userId }) => {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-16">
@@ -30,7 +30,7 @@ const FileList = ({ files, loading, onFileDelete }) => {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {files.map((file) => (
-        <FileCard key={file.id} file={file} onDelete={onFileDelete} />
+        <FileCard key={file.id} file={file} onDelete={onFileDelete} userId={userId} />
       ))}
     </div>
   )

@@ -1,48 +1,102 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Copy, X, RefreshCw, Trash2, ExternalLink } from 'lucide-react'
+import { Copy, X, RefreshCw, Trash2, ExternalLink, QrCode } from 'lucide-react'
 import { createShareLink, getUserShareLinks, revokeShareLink } from '../../services/shareService'
+import { supabase } from '../../services/supabase'
+import QRGenerator from '../QRCode/QRGenerator'
 import { toast } from 'sonner'
 
-export default function ShareDialog({ isOpen, onClose, userId }) {
+export default function ShareDialog({ isOpen, onClose, userId: propUserId }) {
   const [shareLinks, setShareLinks] = useState([])
   const [isLoading, setIsLoading] = useState(false)
+  const [selectedLinkForQR, setSelectedLinkForQR] = useState(null)
+  const [actualUserId, setActualUserId] = useState(propUserId)
   const [newLink, setNewLink] = useState({
     days: 7,
     maxUses: 10
   })
 
+  // Get userId from session if not provided
+  useEffect(() => {
+    const getUserId = async () => {
+      if (propUserId) {
+        setActualUserId(propUserId)
+        return
+      }
+
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session?.user?.id) {
+          setActualUserId(session.user.id)
+        } else {
+          console.warn('No user session found')
+          setActualUserId(null)
+        }
+      } catch (error) {
+        console.error('Error getting user session:', error)
+        setActualUserId(null)
+      }
+    }
+
+    if (isOpen) {
+      getUserId()
+    }
+  }, [isOpen, propUserId])
+
   const loadShareLinks = useCallback(async () => {
+    const userIdToUse = actualUserId || propUserId
+    
+    if (!userIdToUse) {
+      console.warn('No userId available for ShareDialog')
+      setShareLinks([])
+      return
+    }
+
     try {
       setIsLoading(true)
-      const links = await getUserShareLinks(userId)
-      setShareLinks(links)
+      const links = await getUserShareLinks(userIdToUse)
+      setShareLinks(links || [])
     } catch (error) {
       console.error('Error loading share links:', error)
-      toast.error('Failed to load share links')
+      const errorMessage = error.message || 'Failed to load share links'
+      toast.error(errorMessage)
+      setShareLinks([])
     } finally {
       setIsLoading(false)
     }
-  }, [userId])
+  }, [actualUserId, propUserId])
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && actualUserId) {
       loadShareLinks()
+    } else if (isOpen && !actualUserId && !propUserId) {
+      // Only show error if we've checked and confirmed no user
+      setTimeout(() => {
+        toast.error('Please log in to share files')
+      }, 100)
     }
-  }, [isOpen, loadShareLinks])
+  }, [isOpen, actualUserId, propUserId, loadShareLinks])
 
   const handleCreateLink = async () => {
+    const userIdToUse = actualUserId || propUserId
+    
+    if (!userIdToUse) {
+      toast.error('Please log in to create share links')
+      return
+    }
+
     try {
       setIsLoading(true)
-      const link = await createShareLink(userId, {
-        days: parseInt(newLink.days),
+      const link = await createShareLink(userIdToUse, {
+        days: parseInt(newLink.days) || 7,
         maxUses: newLink.maxUses ? parseInt(newLink.maxUses) : null
       })
       
       setShareLinks([link, ...shareLinks])
-      toast.success('Share link created')
+      toast.success('Share link created successfully!')
     } catch (error) {
       console.error('Error creating share link:', error)
-      toast.error('Failed to create share link')
+      const errorMessage = error.message || 'Failed to create share link'
+      toast.error(errorMessage)
     } finally {
       setIsLoading(false)
     }
@@ -169,19 +223,44 @@ export default function ShareDialog({ isOpen, onClose, userId }) {
                           {link.isMaxUses && !link.isExpired && <span className="text-red-500 ml-2">• Max uses reached</span>}
                         </div>
                       </div>
-                      <button
-                        onClick={() => handleRevokeLink(link.id)}
-                        className="text-red-500 hover:text-red-700 dark:hover:text-red-400 p-1"
-                        title="Revoke link"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      <div className="flex items-center space-x-1">
+                        <button
+                          onClick={() => setSelectedLinkForQR(link.shareUrl)}
+                          className="text-blue-500 hover:text-blue-700 dark:hover:text-blue-400 p-1"
+                          title="Show QR Code"
+                        >
+                          <QrCode className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleRevokeLink(link.id)}
+                          className="text-red-500 hover:text-red-700 dark:hover:text-red-400 p-1"
+                          title="Revoke link"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
             )}
           </div>
+
+          {/* QR Code Display */}
+          {selectedLinkForQR && (
+            <div className="mt-6 border-t dark:border-gray-700 pt-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-medium text-gray-900 dark:text-white">QR Code for Share Link</h3>
+                <button
+                  onClick={() => setSelectedLinkForQR(null)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <QRGenerator shareUrl={selectedLinkForQR} fileName="share-link" />
+            </div>
+          )}
         </div>
 
         <div className="p-4 border-t dark:border-gray-700 flex justify-end">

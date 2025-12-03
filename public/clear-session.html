@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Clear Session - MedVault</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+        .success {
+            background: #10b981;
+            color: white;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+        .info {
+            background: #f3f4f6;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+            border-left: 4px solid #3b82f6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Clear MedVault Session</h1>
+        <div class="info">
+            <p>This will clear all stored authentication data from your browser.</p>
+            <p>Use this if you're experiencing login issues or 401 errors.</p>
+        </div>
+        <button onclick="clearSession()">Clear Session</button>
+        <button onclick="checkSession()">Check Current Session</button>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        function clearSession() {
+            let cleared = [];
+            
+            // Clear localStorage
+            Object.keys(localStorage).forEach(key => {
+                if (key.includes('supabase') || key.includes('auth') || key.includes('medvault')) {
+                    localStorage.removeItem(key);
+                    cleared.push(key);
+                }
+            });
+            
+            // Clear sessionStorage
+            Object.keys(sessionStorage).forEach(key => {
+                if (key.includes('supabase') || key.includes('auth') || key.includes('medvault')) {
+                    sessionStorage.removeItem(key);
+                    cleared.push(key);
+                }
+            });
+            
+            const result = document.getElementById('result');
+            if (cleared.length > 0) {
+                result.innerHTML = `
+                    <div class="success">
+                        <strong>Success!</strong> Cleared ${cleared.length} session items:
+                        <ul>
+                            ${cleared.map(k => `<li>${k}</li>`).join('')}
+                        </ul>
+                        <p><strong>Next step:</strong> <a href="/">Go back to home page</a> or refresh the page.</p>
+                    </div>
+                `;
+            } else {
+                result.innerHTML = `
+                    <div class="info">
+                        No session data found. You're already logged out.
+                    </div>
+                `;
+            }
+        }
+        
+        function checkSession() {
+            const sessionKeys = Object.keys(localStorage).filter(k => 
+                k.includes('supabase') || k.includes('auth') || k.includes('medvault')
+            );
+            
+            const result = document.getElementById('result');
+            if (sessionKeys.length > 0) {
+                result.innerHTML = `
+                    <div class="info">
+                        <strong>Found ${sessionKeys.length} session items:</strong>
+                        <ul>
+                            ${sessionKeys.map(k => `<li>${k}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            } else {
+                result.innerHTML = `
+                    <div class="info">
+                        No session data found.
+                    </div>
+                `;
+            }
+        }
+        
+        // Check on load
+        window.onload = checkSession;
+    </script>
+</body>
+</html>
+

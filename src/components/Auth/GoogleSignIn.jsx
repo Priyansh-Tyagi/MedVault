@@ -1,20 +1,47 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { signInWithGoogle, signInWithEmail, signUpWithEmail } from '../../services/auth'
+import { useAuth } from '../../hooks/useAuth'
+import { isSupabaseConfigured } from '../../services/supabase'
+import { toast } from 'sonner'
 
 const GoogleSignIn = () => {
+  const navigate = useNavigate()
+  const { user } = useAuth()
   const [isSignUp, setIsSignUp] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user) {
+      navigate('/dashboard', { replace: true })
+    }
+  }, [user, navigate])
+
+  // Check Supabase configuration
+  useEffect(() => {
+    if (!isSupabaseConfigured()) {
+      setError('Supabase is not configured. Please check your environment variables.')
+      toast.error('Configuration error: Missing Supabase credentials')
+    }
+  }, [])
+
   const handleGoogleSignIn = async () => {
     try {
       setLoading(true)
       setError(null)
-      await signInWithGoogle()
+      const { url } = await signInWithGoogle()
+      // Google OAuth redirects automatically, so we don't need to navigate
+      if (url) {
+        window.location.href = url
+      }
     } catch (err) {
-      setError(err.message)
+      const errorMessage = err.message || 'Failed to sign in with Google'
+      setError(errorMessage)
+      toast.error(errorMessage)
       console.error('Google sign in error:', err)
     } finally {
       setLoading(false)
@@ -28,13 +55,26 @@ const GoogleSignIn = () => {
       setError(null)
       
       if (isSignUp) {
-        await signUpWithEmail(email, password)
-        alert('Check your email for verification link!')
+        const result = await signUpWithEmail(email, password)
+        if (result.user && !result.session) {
+          // Email confirmation required
+          toast.success('Check your email for verification link!')
+          setError('Please check your email and click the verification link to complete signup.')
+        } else {
+          // Auto-confirmed, redirect to dashboard
+          toast.success('Account created successfully!')
+          navigate('/dashboard', { replace: true })
+        }
       } else {
         await signInWithEmail(email, password)
+        toast.success('Signed in successfully!')
+        // Navigation will happen automatically via useEffect when user state updates
+        navigate('/dashboard', { replace: true })
       }
     } catch (err) {
-      setError(err.message)
+      const errorMessage = err.message || 'Authentication failed'
+      setError(errorMessage)
+      toast.error(errorMessage)
       console.error('Email auth error:', err)
     } finally {
       setLoading(false)
@@ -50,7 +90,7 @@ const GoogleSignIn = () => {
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+          <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 rounded-lg text-sm">
             {error}
           </div>
         )}

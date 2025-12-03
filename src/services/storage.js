@@ -110,7 +110,7 @@ export const deleteMedicalRecord = async (recordId) => {
   }
 }
 
-// Download file
+// Download file using storage path
 export const downloadFile = async (filePath) => {
   try {
     const { data, error } = await supabase.storage
@@ -118,6 +118,17 @@ export const downloadFile = async (filePath) => {
       .download(filePath)
 
     if (error) throw error
+    
+    // Create download link
+    const url = URL.createObjectURL(data)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filePath.split('/').pop()
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    
     return data
   } catch (error) {
     console.error('Download error:', error)
@@ -125,13 +136,118 @@ export const downloadFile = async (filePath) => {
   }
 }
 
-// Get file URL
-export const getFileUrl = (filePath) => {
+// Get signed URL for file (works for private buckets)
+// Note: This requires authentication. For unauthenticated users (share links),
+// we need to use a different approach or make the bucket accessible via policies
+export const getSignedUrl = async (filePath, expiresIn = 3600) => {
+  try {
+    // Check if user is authenticated
+    const { data: { session } } = await supabase.auth.getSession()
+    
+    if (!session) {
+      // For unauthenticated users, try to get public URL first
+      // This will work if storage policy allows it
+      const { data: { publicUrl } } = supabase.storage
+        .from(BUCKET_NAME)
+        .getPublicUrl(filePath)
+      
+      // Test if public URL works
+      try {
+        const response = await fetch(publicUrl, { method: 'HEAD' })
+        if (response.ok) {
+          return publicUrl
+        }
+      } catch (e) {
+        // Public URL doesn't work, throw error
+        throw new Error('File access requires authentication. Please ensure storage policies allow access via share links.')
+      }
+    }
+    
+    // For authenticated users, create signed URL
+    const { data, error } = await supabase.storage
+      .from(BUCKET_NAME)
+      .createSignedUrl(filePath, expiresIn)
+
+    if (error) throw error
+    return data.signedUrl
+  } catch (error) {
+    console.error('Error creating signed URL:', error)
+    throw error
+  }
+}
+
+// Get file URL (tries public first, then signed)
+export const getFileUrl = async (filePath, useSigned = false) => {
+  if (useSigned) {
+    return await getSignedUrl(filePath)
+  }
+  
   const { data } = supabase.storage
     .from(BUCKET_NAME)
     .getPublicUrl(filePath)
   
   return data.publicUrl
+}
+
+// Download file by record (uses storage_path)
+export const downloadFileByRecord = async (record) => {
+  try {
+    if (!record.storage_path) {
+      throw new Error('Storage path not found')
+    }
+
+    // Check if user is authenticated
+    const { data: { session } } = await supabase.auth.getSession()
+    
+    if (!session) {
+      // For unauthenticated users (share links), use public URL or signed URL
+      // First try to get a URL that works
+      const signedUrl = await getSignedUrl(record.storage_path)
+      
+      // Download via fetch and create blob
+      const response = await fetch(signedUrl)
+      if (!response.ok) {
+        throw new Error('Failed to download file')
+      }
+      
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = record.file_name
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      return
+    }
+
+    // For authenticated users, use direct download
+    const { data, error } = await supabase.storage
+      .from(BUCKET_NAME)
+      .download(record.storage_path)
+
+    if (error) {
+      // If download fails, try signed URL
+      console.warn('Direct download failed, trying signed URL:', error)
+      const signedUrl = await getSignedUrl(record.storage_path)
+      window.open(signedUrl, '_blank')
+      return
+    }
+
+    // Create download
+    const url = URL.createObjectURL(data)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = record.file_name
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  } catch (error) {
+    console.error('Download error:', error)
+    throw error
+  }
 }
 
 // Backwards-compatible aliases for other modules

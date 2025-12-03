@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { Upload, X, AlertCircle, CheckCircle } from 'lucide-react'
 import { validateFile, formatFileSize, getFileIcon } from '../../utils/fileValidation'
-import { uploadFile } from '../../services/storage'
-import { saveFileMetadata } from '../../services/firestore'
+import { uploadMedicalRecord as uploadFile } from '../../services/storage'
+import { toast } from 'sonner'
 
 const FileUploader = ({ userId, onUploadComplete }) => {
   const [selectedFiles, setSelectedFiles] = useState([])
@@ -38,6 +38,11 @@ const FileUploader = ({ userId, onUploadComplete }) => {
   }
 
   const handleUpload = async () => {
+    if (!userId) {
+      console.error('User ID is required for upload')
+      return
+    }
+
     const validFiles = selectedFiles.filter(f => f.isValid)
     if (validFiles.length === 0) return
 
@@ -47,23 +52,18 @@ const FileUploader = ({ userId, onUploadComplete }) => {
       try {
         setUploadProgress(prev => ({ ...prev, [fileObj.id]: 'uploading' }))
 
-        // Upload to storage
-        const storageResult = await uploadFile(fileObj.file, userId)
-
-        // Save metadata to database
-        await saveFileMetadata({
-          userId,
-          fileName: fileObj.file.name,
-          fileType: fileObj.file.type,
-          fileSize: fileObj.file.size,
-          storagePath: storageResult.path,
-          publicUrl: storageResult.publicUrl
+        // Upload to storage using uploadMedicalRecord (which handles both storage and metadata)
+        const result = await uploadFile(fileObj.file, userId, {
+          recordType: 'document',
+          recordDate: new Date().toISOString()
         })
 
         setUploadProgress(prev => ({ ...prev, [fileObj.id]: 'success' }))
+        toast.success(`${fileObj.file.name} uploaded successfully`)
       } catch (error) {
         console.error('Upload failed:', error)
         setUploadProgress(prev => ({ ...prev, [fileObj.id]: 'error' }))
+        toast.error(`Failed to upload ${fileObj.file.name}`)
       }
     }
 
